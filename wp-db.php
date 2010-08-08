@@ -55,7 +55,13 @@ if (!file_exists($config_path)) {
     die("Cannot find specified configuration file: " . $config_path . "\n");
 } 
 
-include $config_path;
+try {
+    @include $config_path;
+}
+catch (Exception $e) {
+    echo 'Message: ' .$e->getMessage();
+    die(1);
+}
 
 $db_host = explode(":", DB_HOST);
 $db_port = 3306; // default mysql port
@@ -85,8 +91,8 @@ if (strtolower($command) == "backup") {
     $cwd = NULL;
     $env = NULL;
     $process = proc_open("mysqldump --defaults-extra-file=" . $passwd_file_path . 
-        " --databases " . DB_NAME . " -u" . DB_USER . " --host " . $db_host . 
-        " --port " . $db_port . " > " . $sql_path, $descriptorspec, $pipes, $cwd, $env);
+        " -u" . DB_USER . " --host " . $db_host . " --port " . $db_port . " " . 
+        DB_NAME . " > " . $sql_path, $descriptorspec, $pipes, $cwd, $env);
     fclose($pipes[0]);
     fclose($pipes[1]);
     $return_value = proc_close($process);
