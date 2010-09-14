@@ -19,7 +19,12 @@ case('import'):
 default:
 endswitch;
 
-$sql_path = $_SERVER["argv"][2];
+if (array_key_exists(2, $_SERVER["argv"])) {
+    $sql_path = $_SERVER["argv"][2];
+} else {
+    $sql_path = '';
+}
+
 
 $config_path = "";
 
@@ -139,7 +144,6 @@ default:
     echo "Command " . $command . " not implemented.\n";
 endswitch;
 
-echo "$cmd\n";
 if ( isset($cmd) ) $return_code = execute($cmd);
 
 if ($settings_created) {
