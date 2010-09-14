@@ -1,14 +1,24 @@
 #!/usr/bin/php -q
 <? 
 if ($_SERVER["argc"] > 4) {
-    die("Too many parameters. Syntax: wp-db <import/backup> <path to sql> [path to wp-config.php]\n");
+    die("Too many parameters. Syntax: wp-db <import/backup/reset> <path to sql> [path to wp-config.php]\n");
 }
 
-if ($_SERVER["argc"] < 3) {
-    die("Too few parameters. Syntax: wp-db <import/backup> <path to sql> [path to wp-config.php]\n");
+if ($_SERVER["argc"] < 2) {
+   die("Too few parameters. Syntax: wp-db <import/backup/reset> <path to sql> [path to wp-config.php]\n");
 }
 
 $command = $_SERVER["argv"][1];
+
+switch ( $command ):
+case('backup'):
+case('import'):
+    if ($_SERVER["argc"] < 3) {
+        die("Too few parameters. Syntax: wp-db <import/backup/reset> <path to sql> [path to wp-config.php]\n");
+    }
+default:
+endswitch;
+
 $sql_path = $_SERVER["argv"][2];
 
 $config_path = "";
@@ -50,10 +60,12 @@ if (!file_exists(dirname($config_path) . "/wp-settings.php")) {
     $settings_created = touch(dirname($config_path) . "/wp-settings.php");
 }
 
-
 if (!file_exists($config_path)) {
     die("Cannot find specified configuration file: " . $config_path . "\n");
 } 
+
+# define WP_INSTALLING to prevent wp from aborting execution
+define('WP_INSTALLING', 1);
 
 try {
     @include $config_path;
@@ -76,39 +88,59 @@ $db_host = $db_host[0];
 // Can't pass password in via stdin so create a temp file with the password
 $passwd_file_path = tempnam(".", "passwd");
 $passwd_file = fopen($passwd_file_path, "w");
+fwrite($passwd_file,"[mysql]\npassword=". DB_PASSWORD ."\n");
 fwrite($passwd_file,"[mysqldump]\npassword=" . DB_PASSWORD . "\n");
 fwrite($passwd_file,"[mysqlimport]\npassword=" . DB_PASSWORD . "\n");
 fclose($passwd_file);
 
-$descriptorspec = array(
-    0 => array("pipe", "r"),  // stdin is a pipe that the child will read from
-    1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
-    2 => array("file", "/tmp/wp-db-stderr.txt", "a") // stderr is a file to write to
-    );
-
-if (strtolower($command) == "backup") {
-// $cwd is left null so it will pick the actual current working dir
+function execute($cmd){
+    $descriptorspec = array(
+        0 => array("pipe", "r"),  // stdin is a pipe that the child will read from
+        1 => array("pipe", "w"),  // stdout is a pipe that the child will write to
+        2 => array("file", "/tmp/wp-db-stderr.txt", "a") // stderr is a file to write to
+    );   
     $cwd = NULL;
     $env = NULL;
-    $process = proc_open("mysqldump --defaults-extra-file=" . $passwd_file_path . 
-        " -u" . DB_USER . " --host " . $db_host . " --port " . $db_port . " " . 
-        DB_NAME . " > " . $sql_path, $descriptorspec, $pipes, $cwd, $env);
+    $process = proc_open($cmd, $descriptorspec, $pipes, $cwd, $env);
     fclose($pipes[0]);
     fclose($pipes[1]);
-    $return_value = proc_close($process);
-} elseif (strtolower($command) == "import") {
-    $cwd = NULL;
-    $env = NULL;
-    $process = proc_open("mysqlimport --defaults-extra-file=" . $passwd_file_path . 
-        " -u" . DB_USER . " --host " . $db_host . " --port " . $db_port . 
-        " " . $sql_path, $descriptorspec, $pipes, $cwd, $env);
-    fclose($pipes[0]);
-    fclose($pipes[1]);
-    $return_value = proc_close($process);
-} else {
-    echo "Command " . $command . " not implemented.\n";
+    return proc_close($process);	
 }
 
+/**
+ * Set specified user's password to equal the user's username.
+ * If user does not exist, create it.
+ * @param  $user
+ * @return void
+ */
+function set_user_password($user) {
+    if ( username_exists($user) ) {
+        $uObj = get_userdatabylogin($user);
+        wp_update_user(array('ID'=>$uObj->ID, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost"));
+    } else {
+        wp_insert_user(array('user_login'=>$user, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost"));
+    }
+}
+
+switch (strtolower($command)) :
+case('backup'):
+// $cwd is left null so it will pick the actual current working dir
+    $cmd = sprintf('mysqldump --defaults-extra-file=%s -u %s --host=%s --port=%s > %s', $passwd_file_path, DB_USER, $db_host, $db_port, DB_NAME, $sql_path);
+    break;
+case('import'):
+    $cmd = sprintf('mysql --defaults-extra-file=%s -u %s --host=%s --port=%s %s < %s', $passwd_file_path, DB_USER, $db_host, $db_port, DB_NAME, $sql_path);
+    break;
+case('reset'):
+    require_once(ABSPATH . WPINC . '/registration.php');
+    set_user_password('admin');
+    set_user_password('editor');
+    break;
+default:
+    echo "Command " . $command . " not implemented.\n";
+endswitch;
+
+echo "$cmd\n";
+if ( isset($cmd) ) $return_code = execute($cmd);
 
 if ($settings_created) {
     unlink(dirname($config_path) . "/wp-settings.php");
