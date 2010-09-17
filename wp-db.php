@@ -118,12 +118,12 @@ function execute($cmd){
  * @param  $user
  * @return void
  */
-function set_user_password($user) {
+function set_user_password($user, $role) {
     if ( username_exists($user) ) {
         $uObj = get_userdatabylogin($user);
-        wp_update_user(array('ID'=>$uObj->ID, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost"));
+        wp_update_user(array('ID'=>$uObj->ID, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost", 'role'=>$role));
     } else {
-        wp_insert_user(array('user_login'=>$user, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost"));
+        wp_insert_user(array('user_login'=>$user, 'user_pass'=>$user, 'user_email'=>"dev+$user@localhost", 'role'=>$role));
     }
 }
 
@@ -137,8 +137,8 @@ case('import'):
     break;
 case('reset'):
     require_once(ABSPATH . WPINC . '/registration.php');
-    set_user_password('admin');
-    set_user_password('editor');
+    set_user_password('admin', 'administrator');
+    set_user_password('editor', 'editor');
     break;
 default:
     echo "Command " . $command . " not implemented.\n";
