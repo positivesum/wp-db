@@ -1,5 +1,5 @@
 #!/usr/local/bin/php -q
-<? 
+<?php 
 if ($_SERVER["argc"] > 4) {
     die("Too many parameters. Syntax: wp-db <import/backup/reset> <path to sql> [path to wp-config.php]\n");
 }
